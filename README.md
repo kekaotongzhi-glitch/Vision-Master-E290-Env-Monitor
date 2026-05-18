@@ -1,6 +1,6 @@
-# ESP32-S3 墨水屏温湿度监测终端
+# Vision Master E290 温湿度监测终端
 
-这是我基于 **Heltec Vision Master E290** 做的一个温湿度监测终端固件。Vision Master E290 这块板子本身集成了 **ESP32-S3、SX1262 LoRa 和 E-Ink 墨水屏**，属于带 LoRa 能力的墨水屏节点硬件。
+这是基于 **Heltec Vision Master E290** 开发板做的一个温湿度监测终端固件。Vision Master E290 这块板子本身集成了 **ESP32-S3、SX1262 LoRa 和 E-Ink 墨水屏**，属于带 LoRa 能力的墨水屏节点硬件。
 
 当前这版固件主要用到了 ESP32-S3、墨水屏、Wi-Fi、BLE、MQTT 和本地 Web 后台。板载 SX1262 LoRa 硬件暂未作为当前主要通信链路使用，本仓库也没有实现 Meshtastic 或 LoRaWAN。
 
