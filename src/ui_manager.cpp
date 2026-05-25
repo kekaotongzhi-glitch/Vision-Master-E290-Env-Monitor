@@ -6,6 +6,8 @@
 
 static lv_obj_t *label_temp = nullptr;
 static lv_obj_t *label_hum = nullptr;
+static lv_obj_t *label_temp_unit = nullptr;
+static lv_obj_t *label_hum_unit = nullptr;
 static lv_obj_t *label_batt_pct = nullptr;
 static lv_obj_t *label_charge = nullptr;
 static lv_obj_t *label_wifi = nullptr;
@@ -46,22 +48,20 @@ static const uint32_t STATUS_REFRESH_MIN_MS = 5000;
 static const uint32_t GHOST_CLEANUP_MS = 20UL * 60UL * 1000UL;
 static const uint8_t MAX_PARTIALS_BEFORE_FULL = 30;
 
+
 static const char* wifi_status_text(WifiStatus status) {
-    switch (status) {
-        case WifiStatus::UNCONFIGURED: return "W CFG";
-        case WifiStatus::CONNECTING: return "W ...";
-        case WifiStatus::CONNECTED: return "W OK";
-        case WifiStatus::OFFLINE: return "W OFF";
-        default: return "W ?";
+    if (status == WifiStatus::CONNECTED) {
+        return LV_SYMBOL_WIFI " " LV_SYMBOL_OK;
+    } else {
+        return LV_SYMBOL_WIFI " " LV_SYMBOL_CLOSE;
     }
 }
 
 static const char* mqtt_status_text(MqttStatus status) {
-    switch (status) {
-        case MqttStatus::CONNECTED: return "M OK";
-        case MqttStatus::CONNECTING: return "M ...";
-        case MqttStatus::DISCONNECTED: return "M OFF";
-        default: return "M ?";
+    if (status == MqttStatus::CONNECTED) {
+        return LV_SYMBOL_HOME " " LV_SYMBOL_OK;
+    } else {
+        return LV_SYMBOL_HOME " " LV_SYMBOL_CLOSE;
     }
 }
 
@@ -72,18 +72,36 @@ static bool set_label_text_if_changed(lv_obj_t *label, String &cache, const Stri
     return true;
 }
 
+ 
 static void update_status_line() {
     if (!label_wifi) return;
 
-    String text = String(wifi_status_text(current_wifi_status)) + " " +
-                  mqtt_status_text(current_mqtt_status) + " B";
-    if (status_battery_percent < 0) {
-        text += "--";
+    String text = String(wifi_status_text(current_wifi_status)) + "   " +
+                  String(mqtt_status_text(current_mqtt_status)) + "   ";
+
+    if (status_charging) {
+        text += String(LV_SYMBOL_CHARGE) + " ";
     } else {
-        text += String(status_battery_percent);
+        if (status_battery_percent >= 0) {
+            if (status_battery_percent >= 80) {
+                text += String(LV_SYMBOL_BATTERY_FULL) + " ";
+            } else if (status_battery_percent >= 50) {
+                text += String(LV_SYMBOL_BATTERY_3) + " ";
+            } else if (status_battery_percent >= 20) {
+                text += String(LV_SYMBOL_BATTERY_1) + " ";
+            } else {
+                text += String(LV_SYMBOL_BATTERY_EMPTY) + " ";
+            }
+        } else {
+            text += String(LV_SYMBOL_BATTERY_EMPTY) + " ";
+        }
     }
-    if (status_charging) text += "+";
-    if (provisioning_active) text += " BLE";
+
+    if (status_battery_percent < 0) {
+        text += "--%";
+    } else {
+        text += String(status_battery_percent) + "%";
+    }
 
     set_label_text_if_changed(label_wifi, last_status_text, text);
 }
@@ -92,13 +110,13 @@ static void layout_status_bar() {
     if (!label_batt_pct || !label_charge || !label_wifi || !label_mqtt || !label_ble) return;
 
     update_status_line();
-    lv_obj_align(label_wifi, LV_ALIGN_TOP_RIGHT, -3, 3);
+    lv_obj_align(label_wifi, LV_ALIGN_TOP_RIGHT, -8, 4);
     lv_obj_add_flag(label_charge, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_batt_pct, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_mqtt, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_ble, LV_OBJ_FLAG_HIDDEN);
     if (label_env) {
-        lv_obj_align(label_env, LV_ALIGN_BOTTOM_MID, 0, -2);
+        lv_obj_align(label_env, LV_ALIGN_BOTTOM_MID, 0, -4);
     }
 }
 
@@ -178,26 +196,42 @@ void ui_init() {
     lv_obj_set_style_bg_opa(cont, 0, 0);
     lv_obj_center(cont);
 
+    static lv_point_t line_pts[] = { {0, 0}, {296, 0} };
+    lv_obj_t *line_h = lv_line_create(scr);
+    lv_line_set_points(line_h, line_pts, 2);
+    lv_obj_align(line_h, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_set_style_line_width(line_h, 1, 0);
+    lv_obj_set_style_line_color(line_h, lv_color_black(), 0);
+
+    static lv_point_t vline_pts[] = { {0, 0}, {0, 78} };
+    lv_obj_t *line_v = lv_line_create(scr);
+    lv_line_set_points(line_v, vline_pts, 2);
+    lv_obj_align(line_v, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_set_style_line_width(line_v, 1, 0);
+    lv_obj_set_style_line_color(line_v, lv_color_black(), 0);
+
     label_temp = lv_label_create(cont);
     lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_40, 0);
+    lv_obj_set_style_text_color(label_temp, lv_color_black(), 0);
     lv_label_set_text(label_temp, "--.-");
-    lv_obj_align(label_temp, LV_ALIGN_CENTER, -78, -4);
+    lv_obj_align(label_temp, LV_ALIGN_CENTER, -74, 0);
 
-    lv_obj_t *unit_t = lv_label_create(cont);
-    lv_label_set_text(unit_t, "TEMP C");
-    lv_obj_set_style_text_font(unit_t, &lv_font_montserrat_14, 0);
-    lv_obj_align(unit_t, LV_ALIGN_CENTER, -78, 30);
-
+    label_temp_unit = lv_label_create(cont);
+    lv_label_set_text(label_temp_unit, "°C");
+    lv_obj_set_style_text_font(label_temp_unit, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(label_temp_unit, lv_color_black(), 0);
+    lv_obj_align_to(label_temp_unit, label_temp, LV_ALIGN_OUT_LEFT_MID, -6, 2);
     label_hum = lv_label_create(cont);
     lv_obj_set_style_text_font(label_hum, &lv_font_montserrat_40, 0);
+    lv_obj_set_style_text_color(label_hum, lv_color_black(), 0);
     lv_label_set_text(label_hum, "--.-");
-    lv_obj_align(label_hum, LV_ALIGN_CENTER, 78, -4);
+    lv_obj_align(label_hum, LV_ALIGN_CENTER, 74, 0);
 
-    lv_obj_t *unit_h = lv_label_create(cont);
-    lv_label_set_text(unit_h, "HUM %");
-    lv_obj_set_style_text_font(unit_h, &lv_font_montserrat_14, 0);
-    lv_obj_align(unit_h, LV_ALIGN_CENTER, 78, 30);
-
+    label_hum_unit = lv_label_create(cont);
+    lv_label_set_text(label_hum_unit, "%");
+    lv_obj_set_style_text_font(label_hum_unit, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(label_hum_unit, lv_color_black(), 0);
+    lv_obj_align_to(label_hum_unit, label_hum, LV_ALIGN_OUT_RIGHT_MID, 6, 2);
     label_batt_pct = lv_label_create(scr);
     lv_obj_set_style_text_font(label_batt_pct, &lv_font_montserrat_12, 0);
     lv_label_set_text(label_batt_pct, "Bat --%");
@@ -209,6 +243,7 @@ void ui_init() {
 
     label_wifi = lv_label_create(scr);
     lv_obj_set_style_text_font(label_wifi, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(label_wifi, lv_color_black(), 0);
 
     label_mqtt = lv_label_create(scr);
     lv_obj_set_style_text_font(label_mqtt, &lv_font_montserrat_10, 0);
@@ -220,11 +255,13 @@ void ui_init() {
 
     label_time = lv_label_create(scr);
     lv_obj_set_style_text_font(label_time, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(label_time, lv_color_black(), 0);
     lv_label_set_text(label_time, "--:--");
-    lv_obj_align(label_time, LV_ALIGN_TOP_LEFT, 4, 2);
+    lv_obj_align(label_time, LV_ALIGN_TOP_LEFT, 8, 4);
 
     label_env = lv_label_create(scr);
     lv_obj_set_style_text_font(label_env, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(label_env, lv_color_black(), 0);
     lv_label_set_text(label_env, "");
     lv_obj_set_style_border_width(label_env, 0, 0);
     lv_obj_set_style_pad_left(label_env, 0, 0);
@@ -262,6 +299,12 @@ void ui_update_sensor_data(float temperature, float humidity) {
     }
 
     if (changed) {
+        if (label_temp_unit && label_temp) {
+            lv_obj_align_to(label_temp_unit, label_temp, LV_ALIGN_OUT_LEFT_MID, -6, 2);
+        }
+        if (label_hum_unit && label_hum) {
+            lv_obj_align_to(label_hum_unit, label_hum, LV_ALIGN_OUT_RIGHT_MID, 6, 2);
+        }
         ui_request_refresh(RefreshType::PARTIAL, RefreshReason::SENSOR_CHANGED);
     }
 }
@@ -364,6 +407,8 @@ static void show_qr_screen(const char* qr_data, const char* title_text, const ch
     current_qr_payload = payload;
     label_temp = nullptr;
     label_hum = nullptr;
+    label_temp_unit = nullptr;
+    label_hum_unit = nullptr;
     label_batt_pct = nullptr;
     label_charge = nullptr;
     label_wifi = nullptr;
