@@ -54,15 +54,12 @@ static const time_t VALID_TIME_EPOCH = 1704067200;
 
 struct NtpServerGroup {
     const char* name;
-    const char* server1;
-    const char* server2;
-    const char* server3;
+    const char* server;
 };
 
 static const NtpServerGroup NTP_SERVER_GROUPS[] = {
-    {"CN", "ntp.aliyun.com", "ntp.tencent.com", "cn.pool.ntp.org"},
-    {"ASIA", "sg.pool.ntp.org", "hk.pool.ntp.org", "asia.pool.ntp.org"},
-    {"GLOBAL", "time.cloudflare.com", "time.google.com", "pool.ntp.org"},
+    {"CN", "ntp.aliyun.com"},
+    {"US", "time.google.com"},
 };
 
 static const uint8_t NTP_SERVER_GROUP_COUNT = sizeof(NTP_SERVER_GROUPS) / sizeof(NTP_SERVER_GROUPS[0]);
@@ -198,7 +195,7 @@ static void publish_control_report(const String& cmd, bool ok, const String& msg
     if (mqtt_publish_json(mqtt_topic("control/report"), payload)) {
         Serial.println("[MQTT] 已回复 control/report");
     } else {
-        Serial.println("[MQTT] 发布失败：control/report");
+        Serial.println("[MQTT] control/report 发布失败");
     }
 }
 
@@ -206,7 +203,7 @@ static void publish_control_payload(const String& payload) {
     if (mqtt_publish_json(mqtt_topic("control/report"), payload)) {
         Serial.println("[MQTT] 已回复 control/report");
     } else {
-        Serial.println("[MQTT] 发布失败：control/report");
+        Serial.println("[MQTT] control/report 发布失败");
     }
 }
 
@@ -240,7 +237,7 @@ static void publish_config_report(bool ok, const String& msg) {
     if (mqtt_publish_json(mqtt_topic("config/report"), payload)) {
         Serial.println("[MQTT] 已回复 config/report");
     } else {
-        Serial.println("[MQTT] 发布失败：config/report");
+        Serial.println("[MQTT] config/report 发布失败");
     }
 }
 
@@ -444,7 +441,7 @@ static void mqtt_callback(char* topic, uint8_t* payload, unsigned int length) {
         message += static_cast<char>(payload[i]);
     }
 
-    Serial.print("[MQTT] 收到消息：topic=");
+    Serial.print("[MQTT] 收到消息，topic=");
     Serial.print(topic);
     Serial.print(" bytes=");
     Serial.println(length);
@@ -469,15 +466,11 @@ static void ensure_china_timezone() {
 
 static void request_ntp_time_sync() {
     const NtpServerGroup& group = NTP_SERVER_GROUPS[ntp_group_index % NTP_SERVER_GROUP_COUNT];
-    configTime(0, 0, group.server1, group.server2, group.server3);
+    configTime(0, 0, group.server);
     Serial.print("[NTP] 请求校时，分组=");
     Serial.print(group.name);
     Serial.print(" 服务器=");
-    Serial.print(group.server1);
-    Serial.print(", ");
-    Serial.print(group.server2);
-    Serial.print(", ");
-    Serial.println(group.server3);
+    Serial.println(group.server);
 }
 
 static bool build_wifi_candidates() {
@@ -545,8 +538,8 @@ static void connect_mqtt_if_needed() {
         String control_topic = base_topic + "/control/set";
         bool config_sub_ok = mqtt_client.subscribe(config_topic.c_str(), 0);
         bool control_sub_ok = mqtt_client.subscribe(control_topic.c_str(), 0);
-        Serial.printf("[MQTT] 订阅%s：%s\n", config_sub_ok ? "成功" : "失败", config_topic.c_str());
-        Serial.printf("[MQTT] 订阅%s：%s\n", control_sub_ok ? "成功" : "失败", control_topic.c_str());
+        Serial.printf("[MQTT] 订阅 %s：%s\n", config_topic.c_str(), config_sub_ok ? "成功" : "失败");
+        Serial.printf("[MQTT] 订阅 %s：%s\n", control_topic.c_str(), control_sub_ok ? "成功" : "失败");
         if (!config_sub_ok || !control_sub_ok) {
             Serial.printf("[MQTT] 订阅失败，state=%d\n", mqtt_client.state());
         }
@@ -577,7 +570,7 @@ static void start_wifi_connect() {
     }
 
     WifiProfile& profile = wifi_candidates[wifi_candidate_index];
-    Serial.print("[WiFi] 正在连接：SSID=");
+    Serial.print("[WiFi] 正在连接 SSID=");
     Serial.print(profile.ssid);
     Serial.print(" priority=");
     Serial.print(profile.priority);
@@ -637,7 +630,7 @@ bool network_init() {
     wifi_profiles_init();
 
 #if DEBUG_FORCE_BLE_PROVISIONING
-    Serial.println("[调试] 强制 BLE 配网已启用");
+    Serial.println("[调试] 已启用强制 BLE 配网");
     ui_set_wifi_status(WifiStatus::UNCONFIGURED);
     provisioning_start_ble();
     return false;
